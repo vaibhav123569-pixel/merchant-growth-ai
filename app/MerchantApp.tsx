@@ -15,18 +15,69 @@ type User={id:string,name:string,email?:string,demo:number};
 type Action={id:string,title:string,offer:string,budget:number,status:string,counts:(number|null)[],updated?:number};
 type Message={question:string,text:string,intent:string,mode:string,reason?:string,live?:boolean};
 const draft=():Action=>({id:crypto.randomUUID(),title:"A little afternoon boost",offer:"Try an afternoon combo offer from 2–5 PM for three days. Confirm the price and margin before displaying the offer in store.",budget:300,status:"draft",counts:[null,null,null]});
-async function api(path:string,body?:unknown){const r=await fetch(path,{method:body?"POST":"GET",headers:body?{"Content-Type":"application/json"}:undefined,body:body?JSON.stringify(body):undefined});const data=await r.json() as {error?:string,user:User,actions:Action[],text:string,intent:string,mode:string,reason?:string,live?:boolean,configured:boolean,model:string};if(!r.ok)throw new Error(data.error||"Something went wrong. Please retry.");return data;}
+async function api(path:string,body?:unknown){const r=await fetch(path,{method:body?"POST":"GET",headers:body?{"Content-Type":"application/json"}:undefined,body:body?JSON.stringify(body):undefined});const data=await r.json() as {error?:string,user:User,actions:Action[],text:string,intent:string,mode:string,reason?:string,live?:boolean,configured:boolean,model:string,message?:string,campaigns?:any[],sandbox?:boolean};if(!r.ok)throw new Error(data.error||"Something went wrong. Please retry.");return data;}
 function exportCSV(name:string,rows:(string|number)[][]){const csv="\uFEFF"+rows.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(",")).join("\r\n");const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));const link=document.createElement("a");link.href=url;link.download=name;link.click();URL.revokeObjectURL(url);toast.success("CSV downloaded");}
-function Brand(){return <div className="brand"><span className="logo"><ChartNoAxesCombined/></span><div>merchant<span>GROWTH AI</span></div></div>}
+function Brand(){return <div className="brand"><span className="logo"><ChartNoAxesCombined/></span><div>GROWTH<span>merchant</span></div></div>}
 function Metric({label,value,note,icon:Icon}:{label:string,value:string,note:string,icon:typeof Wallet}){return <article className="metric"><div className="metric-label"><p>{label}</p><span className="metric-icon"><Icon size={18}/></span></div><strong>{value}</strong><small>{note}</small></article>}
 export default function MerchantApp(){
  const[page,setPage]=useState("pulse"),[language,setLanguage]=useState("en"),[user,setUser]=useState<User|null>(null),[paytmData,setPaytmData]=useState<any>(null),[authLoading,setAuthLoading]=useState(true),[authOpen,setAuthOpen]=useState(false),[authMode,setAuthMode]=useState("login"),[showPassword,setShowPassword]=useState(false),[authError,setAuthError]=useState(""),[busy,setBusy]=useState(false);
  const[question,setQuestion]=useState(""),[messages,setMessages]=useState<Message[]>([]),[asking,setAsking]=useState(false),[evidenceOpen,setEvidenceOpen]=useState(false),[evidenceType,setEvidenceType]=useState("sales"),[search,setSearch]=useState(""),[customerFilter,setCustomerFilter]=useState("All"),[settlementFilter,setSettlementFilter]=useState("all"),[selectedHour,setSelectedHour]=useState<number|null>(null);
  const[actions,setActions]=useState<Action[]>([]),[action,setAction]=useState<Action|null>(null),[saving,setSaving]=useState(false),[actionsLoading,setActionsLoading]=useState(false),[actionsError,setActionsError]=useState(""),[tour,setTour]=useState(-1);
  const[llm,setLLM]=useState({configured:false,model:""});
+   const [campaigns, setCampaigns] = useState<any[]>([]);
+  useEffect(() => {
+      if (page === "actions" && user) {
+          api("/api/whatsapp/campaigns").then(res => {
+              if (!res.error) setCampaigns(res.campaigns || []);
+          }).catch(console.error);
+      }
+  }, [page, user]);
+
  const hi=language==="hi";const t=(en:string,hindi:string)=>hi?hindi:en;
+
+  const [waDialogOpen, setWaDialogOpen] = useState(false);
+  const [waOffer, setWaOffer] = useState("");
+  const [waCampaignName, setWaCampaignName] = useState("");
+  const [waLoading, setWaLoading] = useState(false);
+  const [waResult, setWaResult] = useState<{success: boolean, sandbox: boolean, message: string} | null>(null);
+
+  async function confirmSendWhatsApp() {
+      setWaLoading(true);
+      setWaResult(null);
+      try {
+          const res = await api("/api/whatsapp", { message: waOffer, campaignName: waCampaignName });
+          if (res.error) throw new Error(res.error);
+          setWaResult({success: true, sandbox: res.sandbox, message: res.message || ""});
+      } catch (err) {
+          setWaResult({success: false, sandbox: false, message: (err as Error).message});
+      } finally {
+          setWaLoading(false);
+      }
+  }
+
+  function openWaDialog(offer: string, title: string) {
+      setWaOffer(offer);
+      setWaCampaignName(title);
+      setWaResult(null);
+      setWaDialogOpen(true);
+  }
+
  useEffect(()=>{api("/api/auth").then(d => { setUser(d.user); if (d.user) { api("/api/paytm/analytics").then(res => { if (!res.error) setPaytmData(res); }).catch(console.error); } }).catch(()=>toast.error("Account service is unavailable. You can still explore the demo.")).finally(()=>setAuthLoading(false));api("/api/ask").then(d=>setLLM({configured:d.configured,model:d.model})).catch(()=>{});const saved=localStorage.getItem("mg-language");if(saved==="hi")setLanguage(saved);},[]);
- async function loadActions(){if(!user)return;setActionsLoading(true);setActionsError("");try{const d=await api("/api/actions");setActions(d.actions);}catch(err){setActionsError((err as Error).message);}finally{setActionsLoading(false);}}
+ 
+    async function sendWhatsApp(message: string) {
+        setBusy(true);
+        try {
+            const res = await api("/api/whatsapp", { message });
+            if (res.error) throw new Error(res.error);
+            toast.success(res.message || "Sent via WhatsApp!");
+        } catch (err) {
+            toast.error((err as Error).message);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function loadActions(){if(!user)return;setActionsLoading(true);setActionsError("");try{const d=await api("/api/actions");setActions(d.actions);}catch(err){setActionsError((err as Error).message);}finally{setActionsLoading(false);}}
  useEffect(()=>{if(user)void loadActions();else setActions([]);},[user]);
  function navigate(id:string){setPage(id);setTour(-1);}
  function inspect(type="sales"){setEvidenceType(type);setEvidenceOpen(true);}
@@ -47,7 +98,39 @@ export default function MerchantApp(){
  <main className="workspace" key={page}>
  {tour>=0&&<section className="tour-banner"><BookOpen size={23}/><div><strong>{tours[tour].title}</strong><p>{tours[tour].text}</p></div><button className="secondary" onClick={()=>tour<2?tourStep(tour+1):setTour(-1)}>{tour<2?"Next":"Finish"}<ChevronRight size={16}/></button><button className="text-button" onClick={()=>setTour(-1)}>Close</button></section>}
  
-{page==="copilot"&&<><div className="page-heading"><div><p className="eyebrow">AI MERCHANT GROWTH COPILOT</p><h1>{t("Your daily action plan.","आपकी दैनिक कार्य योजना।")}</h1><p>{t("Your business data tells a story. The Copilot turns it into today's next best action.","आपका डेटा आपकी कहानी है। को-पायलट आपको अगला कदम बताता है।")}</p></div></div><div className="metrics"><Metric label={t("Growth Score","ग्रोथ स्कोर")} value={String(a.copilot.growthScore)} note={`${a.copilot.growthTrend} · ${a.copilot.scoreLabel}`} icon={Sparkles}/><Metric label={t("Today's Revenue","आज की कमाई")} value={money(a.total)} note="Current 24h" icon={Wallet}/><Metric label={t("Transactions","लेन-देन")} value={String(a.count)} note="Successful" icon={ArrowUpRight}/><Metric label={t("Average Value","औसत राशि")} value={money(a.total/Math.max(1,a.count))} note="Overall AOV" icon={ArrowUpRight}/></div><div className="main-grid"><section className="panel"><h2>{t("Today's AI Insights","आज की एआई जानकारी")}</h2><div className="insights-list">{a.copilot.insights.map(i=><div key={i.id} className="action-list-item"><div><span className={`status ${i.severity.toLowerCase()}`}>{i.severity}</span><strong>{i.title}</strong><p className="text-sm muted">{i.evidence}</p><div className="mt-2 text-sm"><strong>Action:</strong> {i.action}</div></div></div>)}</div></section><section className="panel"><h2>{t("7-Day Forecast","7-दिन का अनुमान")}</h2><p className="muted mb-4">{t("Expected revenue range based on recent patterns.","हाल के रुझान पर आधारित अनुमानित कमाई।")}</p><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Expected Min</TableHead><TableHead>Expected Max</TableHead></TableRow></TableHeader><TableBody>{a.copilot.forecast.slice(0, 5).map(f=><TableRow key={f.date}><TableCell>{new Date(f.date).toLocaleDateString("en-IN",{weekday:"short",month:"short",day:"numeric"})}</TableCell><TableCell>{money(f.expected_min)}</TableCell><TableCell>{money(f.expected_max)}</TableCell></TableRow>)}</TableBody></Table></section></div><div className="main-grid mt-4"><section className="panel"><h2>{t("Peak Hours & Retention","व्यस्त समय और ग्राहक")}</h2><div className="metrics mt-4"><Metric label="Peak Hour" value={a.copilot.peakHour} note={`${a.copilot.peakHourShare} of daily value`} icon={ArrowUpRight}/><Metric label="Repeat Rate" value={`${Math.round((a.returning/Math.max(1,a.customers.length))*100)}%`} note="Returning vs Total" icon={Users}/></div></section><section className="panel next-step"><span className="action-icon"><Sparkles/></span><div><p className="eyebrow">SMART OFFER RECOMMENDATION</p><h2>{a.copilot.smartOffer.title}</h2><p><strong>Trigger:</strong> {a.copilot.smartOffer.condition}</p><p className="mt-2 text-lg"><strong>{a.copilot.smartOffer.recommendation}</strong></p><p className="muted mt-2"><ShieldCheck size={14} className="inline mr-1"/> Guardrail: {a.copilot.smartOffer.guardrail}</p></div><div className="button-row mt-4"><button className="primary" onClick={()=>alert("Offer accepted and drafted!")}>Accept Offer <Check size={16}/></button><button className="secondary" onClick={()=>alert("Offer dismissed.")}>Dismiss</button></div></section></div></>}
+{page==="copilot"&&<><div className="page-heading"><div><p className="eyebrow">AI MERCHANT GROWTH COPILOT</p><h1>{t("Your daily action plan.","आपकी दैनिक कार्य योजना।")}</h1><p>{t("Your business data tells a story. The Copilot turns it into today's next best action.","आपका डेटा आपकी कहानी है। को-पायलट आपको अगला कदम बताता है।")}</p></div></div><div className="metrics"><Metric label={t("Growth Score","ग्रोथ स्कोर")} value={String(a.copilot.growthScore)} note={`${a.copilot.growthTrend} · ${a.copilot.scoreLabel}`} icon={Sparkles}/><Metric label={t("Today's Revenue","आज की कमाई")} value={money(a.total)} note="Current 24h" icon={Wallet}/><Metric label={t("Transactions","लेन-देन")} value={String(a.count)} note="Successful" icon={ArrowUpRight}/><Metric label={t("Average Value","औसत राशि")} value={money(a.total/Math.max(1,a.count))} note="Overall AOV" icon={ArrowUpRight}/></div><div className="main-grid"><section className="panel"><h2>{t("Today's AI Insights","आज की एआई जानकारी")}</h2><div className="insights-list">{a.copilot.insights.map(i=><div key={i.id} className="action-list-item"><div><span className={`status ${i.severity.toLowerCase()}`}>{i.severity}</span><strong>{i.title}</strong><p className="text-sm muted">{i.evidence}</p><div className="mt-2 text-sm"><strong>Action:</strong> {i.action}</div></div></div>)}</div></section><section className="panel"><h2>{t("7-Day Forecast","7-दिन का अनुमान")}</h2><p className="muted mb-4">{t("Expected revenue range based on recent patterns.","हाल के रुझान पर आधारित अनुमानित कमाई।")}</p><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Expected Min</TableHead><TableHead>Expected Max</TableHead></TableRow></TableHeader><TableBody>{a.copilot.forecast.slice(0, 5).map(f=><TableRow key={f.date}><TableCell>{new Date(f.date).toLocaleDateString("en-IN",{weekday:"short",month:"short",day:"numeric"})}</TableCell><TableCell>{money(f.expected_min)}</TableCell><TableCell>{money(f.expected_max)}</TableCell></TableRow>)}</TableBody></Table></section></div><div className="main-grid mt-4"><section className="panel"><h2>{t("Peak Hours & Retention","व्यस्त समय और ग्राहक")}</h2><div className="metrics mt-4"><Metric label="Peak Hour" value={a.copilot.peakHour} note={`${a.copilot.peakHourShare} of daily value`} icon={ArrowUpRight}/><Metric label="Repeat Rate" value={`${Math.round((a.returning/Math.max(1,a.customers.length))*100)}%`} note="Returning vs Total" icon={Users}/></div></section><section className="panel next-step"><span className="action-icon"><Sparkles/></span><div><p className="eyebrow">SMART OFFER RECOMMENDATION</p><h2>{a.copilot.smartOffer.title}</h2><p><strong>Trigger:</strong> {a.copilot.smartOffer.condition}</p><p className="mt-2 text-lg"><strong>{a.copilot.smartOffer.recommendation}</strong></p><p className="muted mt-2"><ShieldCheck size={14} className="inline mr-1"/> Guardrail: {a.copilot.smartOffer.guardrail}</p></div><div className="button-row mt-4"><button className="primary" onClick={()=>openWaDialog(a.copilot.smartOffer.recommendation, a.copilot.smartOffer.title)} disabled={busy}>Broadcast via WhatsApp <Send size={16}/></button><button className="secondary" onClick={()=>alert("Offer dismissed.")}>Dismiss</button></div></section></div></>}
+
+
+        <section className="panel mt-8">
+            <h2>WhatsApp Campaign Analytics</h2>
+            <p className="muted mb-4">Track delivery and revenue performance of your AI-generated broadcasts.</p>
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Campaign</TableHead>
+                        <TableHead>Sent</TableHead>
+                        <TableHead>Delivered</TableHead>
+                        <TableHead>Read</TableHead>
+                        <TableHead>Redeemed</TableHead>
+                        <TableHead>Revenue</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {campaigns.length === 0 ? (
+                        <TableRow><TableCell colSpan={6} className="text-center py-4 muted">No campaigns run yet.</TableCell></TableRow>
+                    ) : campaigns.map((c, i) => (
+                        <TableRow key={i}>
+                            <TableCell className="font-medium">{c.campaignName || "AI_Smart_Offer_Default"}</TableCell>
+                            <TableCell>{c.sent}</TableCell>
+                            <TableCell>{c.delivered}</TableCell>
+                            <TableCell>{c.read}</TableCell>
+                            <TableCell>{c.redeemed}</TableCell>
+                            <TableCell>{money(c.revenue)}</TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </section>
 
 {page==="pulse"&&<>
 
@@ -79,33 +162,7 @@ export default function MerchantApp(){
     </section>
 )}
 
-{paytmData && (
-    <section className="panel mt-4">
-        <h2>{t("Real-Time Gateway Analytics","रीयल-टाइम गेटवे डेटा")}</h2>
-        <p className="muted mb-4">{t("Verified transactions from Paytm Integration","Paytm इंटीग्रेशन से सत्यापित लेनदेन")}</p>
-        <div className="metrics">
-            <Metric label={t("Today's Revenue","आज की कमाई")} value={money(paytmData.todaysRevenue)} note={`${paytmData.totalSuccessfulTransactions} successful txns`} icon={Wallet}/>
-            <Metric label={t("Success Rate","सफलता दर")} value={`${Math.round(paytmData.successRate)}%`} note={`Out of ${paytmData.totalTransactions} total`} icon={ShieldCheck}/>
-            <Metric label={t("Avg Order Value","औसत राशि")} value={money(paytmData.averageTxnValue)} note="Overall" icon={ArrowUpRight}/>
-        </div>
-        <h3 className="mt-6 mb-2">{t("Recent Gateway Transactions","हाल के गेटवे लेनदेन")}</h3>
-        <Table>
-            <TableHeader><TableRow><TableHead>Order ID</TableHead><TableHead>Amount</TableHead><TableHead>Status</TableHead><TableHead>Mode</TableHead><TableHead>Time</TableHead></TableRow></TableHeader>
-            <TableBody>
-                {paytmData.recentTransactions.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-4 muted">No real transactions yet.</TableCell></TableRow> : 
-                 paytmData.recentTransactions.map((tx: any) => (
-                    <TableRow key={tx.orderId}>
-                        <TableCell className="font-mono text-xs">{tx.orderId}</TableCell>
-                        <TableCell>{money(tx.amount)}</TableCell>
-                        <TableCell><span className={`status ${tx.status === "TXN_SUCCESS" ? "high" : tx.status === "TXN_FAILURE" ? "low" : "medium"}`}>{tx.status}</span></TableCell>
-                        <TableCell>{tx.paymentMode || "-"}</TableCell>
-                        <TableCell>{new Date(tx.transactionTime).toLocaleString()}</TableCell>
-                    </TableRow>
-                ))}
-            </TableBody>
-        </Table>
-    </section>
-)}
+
 <div className="page-heading"><div><p className="eyebrow">{new Date(TODAY).toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" }).toUpperCase()} · IST</p><h1>{t("A clearer view of your business.","आपके व्यापार की साफ़ तस्वीर।")}</h1><p>{t("Your payments tell a story. Let's find your next move.","अपने भुगतान समझें और अगला कदम तय करें।")}</p></div><button className="primary" onClick={()=>{setPage("ask");setQuestion(hi?"दोपहर में भुगतान कम क्यों थे?":"Why was my afternoon slow?");}}>{t("Ask about my business","मेरे व्यापार के बारे में पूछें")}<Sparkles size={17}/></button></div>
  <div className="metrics"><Metric label={t("Today's collections","आज की प्राप्त राशि")} value={money(a.total)} note={`Across ${a.count} payments`} icon={Wallet}/><Metric label={t("Afternoon payments","दोपहर के भुगतान")} value={String(e.count)} note={`${Math.abs(Math.round(e.count - e.baseline))} ${e.count < e.baseline ? "fewer" : e.count > e.baseline ? "more" : "change"} than matched baseline`} icon={ChartNoAxesCombined}/><Metric label={t("Average payment","औसत भुगतान")} value={money(e.average)} note="2–5 PM" icon={ArrowUpRight}/><Metric label={t("Returning customers","लौटने वाले ग्राहक")} value={String(a.returning)} note="2+ visit dates · active in 14 days" icon={Users}/></div>
  <div className="main-grid"><section className="panel"><div className="panel-heading"><div><h2>{t("Your day, hour by hour","हर घंटे की स्थिति")}</h2><p>Payment count · last four Saturdays compared</p></div><button className="icon-button" onClick={()=>exportCSV("hourly-comparison.csv",[["Hour IST","Current payments","Four-Saturday mean"],...a.hours.map(h=>[h.hour,h.count,h.baseline])])} aria-label="Export hourly comparison"><Download size={18}/></button></div><div className="chart" role="group" aria-label="Hourly payment comparison. Select an hour for exact counts.">{a.hours.map((h,i)=><button className={`bar-group ${h.hour>=14&&h.hour<17?"highlight-window":""}`} key={h.hour} onClick={()=>setSelectedHour(h.hour)} aria-label={`${h.hour}:00: ${h.count} payments, baseline ${h.baseline}`}><div className="bars"><div className="bar baseline" style={{height:`${h.baseline*10}px`,animationDelay:`${i*30}ms`}}/><div className="bar" style={{height:`${h.count*10}px`,animationDelay:`${i*35+60}ms`}}/></div><small>{h.hour>12?h.hour-12:h.hour}{h.hour>=12?"p":"a"}</small></button>)}</div><div className="chart-caption"><span><i/> Today</span><span><i className="baseline"/> Matched average</span><span>Shaded: 2–5 PM</span></div><div className="hour-detail" aria-live="polite">{selectedHour!==null?`${selectedHour}:00–${selectedHour+1}:00 · ${a.hours[selectedHour-9].count} payments today · ${a.hours[selectedHour-9].baseline} baseline`:<><Info size={14}/> Select an hour to see its exact counts.</>}</div></section><section className="insight"><span className="insight-label"><Sparkles size={16}/> {t("A MOMENT TO NOTICE","एक ज़रूरी जानकारी")}</span><h2>{t("A quieter afternoon.","दोपहर में कम भुगतान।")}<br/>{t("A useful next step.","एक उपयोगी अगला कदम।")}</h2><div className="comparison"><strong>{e.count}</strong><span>vs</span><strong>{Math.round(e.baseline)}</strong><span className="change-pill">{e.change > 0 ? "+" : ""}{e.change.toFixed(1)}%</span></div><p>{t(`Payments from 2–5 PM changed by ${e.change.toFixed(1)}%. Average payment is ${money(e.average)}.`,`दोपहर 2–5 बजे भुगतान ${e.change.toFixed(1)}% बदला। प्रति भुगतान औसत ${money(e.average)} रहा।`)}</p><button className="light-button" onClick={()=>inspect()}>{t("Explore the evidence","प्रमाण देखें")}<ArrowUpRight size={18}/></button><small>{t("Payment history shows what changed, not why.","भुगतान का इतिहास बदलाव दिखाता है, कारण नहीं।")}</small></section></div>
@@ -120,6 +177,67 @@ export default function MerchantApp(){
  </main></SidebarInset>
  <Sheet open={evidenceOpen} onOpenChange={setEvidenceOpen}><SheetContent className="evidence-sheet"><SheetHeader><span className="eyebrow">EVIDENCE RECEIPT</span><SheetTitle>{evidenceType==="sales"?"Behind the afternoon insight":evidenceType==="cash"?"Settlement reconciliation":"Customer definitions"}</SheetTitle><SheetDescription>{e.source}. All dates and hours use Asia/Kolkata.</SheetDescription></SheetHeader><div className="evidence-body">{evidenceType==="sales"?<><div className="receipt-big"><span>{new Date(TODAY).toLocaleDateString("en-IN", { month: "long", day: "numeric" })} · 2–5 PM</span><strong>{e.count} <small>vs {e.baseline} payments</small></strong><p>{money(e.collections)} vs {money(e.baselineCollections)} · {e.change > 0 ? "+" : ""}{e.change.toFixed(1)}%</p></div><h3>Four matched baseline days</h3><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Payments</TableHead><TableHead>Collected</TableHead></TableRow></TableHeader><TableBody>{e.prior.map(p=><TableRow key={p.date}><TableCell>{p.date}</TableCell><TableCell>{p.count}</TableCell><TableCell>{money(p.collections)}</TableCell></TableRow>)}</TableBody></Table><div className="formula">({e.count} − {Math.round(e.baseline)}) ÷ {Math.round(e.baseline)} × 100 = {e.change > 0 ? "+" : ""}{e.change.toFixed(1)}%</div><p>Average payment is ₹100 in both periods. The current window is 14:00 inclusive to 17:00 exclusive.</p><button className="secondary" onClick={()=>exportCSV("afternoon-evidence.csv",[["Date","Payments","Collections INR","Window IST"],...e.prior.map(p=>[p.date,p.count,p.collections,"14:00-17:00"]),[TODAY,e.count,e.collections,"14:00-17:00"]])}><Download size={16}/> Download evidence</button></>:evidenceType==="customers"?<><div className="receipt-big"><span>As of {new Date(TODAY).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })}</span><strong>{a.customers.length}<small> synthetic IDs</small></strong></div><dl className="definitions"><dt>Returning · {a.returning}</dt><dd>At least two distinct payment dates, with a payment in the last 14 days.</dd><dt>Inactive · {a.inactive}</dt><dd>Last payment was more than 14 days before the scenario date. This takes precedence over the returning label.</dd><dt>New · {a.newCustomers}</dt><dd>Exactly one distinct payment date within the last 14 days.</dd></dl><p>Multiple payments on one day count as one visit date. IDs do not identify real people, and the labels do not establish customer intent.</p></>:<><div className="receipt-big"><span>{new Date(TODAY).toLocaleDateString("en-IN", { month: "long", day: "numeric" })} · all recorded hours</span><strong>{money(a.total)}</strong><p>{money(a.settled)} settled + {money(a.pending)} pending</p></div><p>All {a.count} synthetic payments are collected. Each payment has exactly one settlement state. Pending amounts are already part of collections and must not be added again.</p><p>These states are demo labels. No bank or payment provider has confirmed settlement.</p></>}<div className="caveat"><ShieldCheck size={19}/><div><strong>What these records cannot tell us</strong><p>{evidenceType==="sales"?e.caveat:"Synthetic records illustrate the workflow. They do not establish real customer behaviour or actual available funds."}</p></div></div><small>Dataset v1 · {evidenceType==="sales"?e.id:evidenceType.toUpperCase()+"-v1"}</small></div></SheetContent></Sheet>
  <Dialog open={authOpen} onOpenChange={setAuthOpen}><DialogContent className="auth-dialog"><DialogHeader><div className="auth-mark"><LockKeyhole/></div><DialogTitle>{authMode==="password"?"Keep your account secure":authMode==="register"?"A home for your next move.":"Welcome back, merchant."}</DialogTitle><DialogDescription>{authMode==="password"?"Change your password and end other sessions.":"Save experiments and return to your progress. All payment data stays synthetic."}</DialogDescription></DialogHeader>{authMode!=="password"&&<Tabs value={authMode} onValueChange={v=>{setAuthMode(v);setAuthError("");}}><TabsList className="w-full"><TabsTrigger value="login">Sign in</TabsTrigger><TabsTrigger value="register">Create account</TabsTrigger></TabsList></Tabs>}<form onSubmit={authenticate}>{authMode==="register"&&<label className="field">Shop name<input name="name" autoComplete="organization" required minLength={2} maxLength={60} placeholder="Your shop name"/></label>}{authMode!=="password"&&<label className="field">Email address<input type="email" name="email" autoComplete="email" required maxLength={254} placeholder="you@example.com"/></label>}{authMode==="password"&&<label className="field">Current password<input type="password" name="current" autoComplete="current-password" required/></label>}<label className="field">{authMode==="password"?"New password":"Password"}<div className="password-wrap"><input name="password" type={showPassword?"text":"password"} required minLength={10} maxLength={128} autoComplete={authMode==="login"?"current-password":"new-password"} placeholder="At least 10 characters"/><button type="button" aria-label={showPassword?"Hide password":"Show password"} onClick={()=>setShowPassword(!showPassword)}>{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></label>{authMode!=="login"&&<p className="hint">Use a long, unique password. Passwords are salted and hashed; they are never stored in plain text.</p>}{authError&&<p role="alert" className="inline-error">{authError}</p>}<button className="primary full" disabled={busy}>{busy?<LoaderCircle className="spin" size={18}/>:null}{authMode==="password"?"Update password":authMode==="register"?"Create account":"Sign in"}<ArrowRight size={16}/></button></form>{authMode!=="password"&&<><div className="or-line"><span>or explore with sample data</span></div><button className="secondary full" disabled={busy} onClick={demo}><FlaskConical size={17}/> Open a demo workspace</button><small className="auth-note">Demo drafts survive refresh while this browser remains signed in. Create an account for access after signing out. Demo drafts are not transferred automatically.</small></>}</DialogContent></Dialog>
+ 
+<Dialog open={waDialogOpen} onOpenChange={setWaDialogOpen}>
+    <DialogContent>
+        <DialogHeader>
+            <DialogTitle>WhatsApp Broadcast</DialogTitle>
+            <DialogDescription>Review campaign details before sending to customers.</DialogDescription>
+        </DialogHeader>
+        
+        {!waResult ? (
+            <div className="wa-confirm mt-4">
+                <div className="mb-4 p-3 bg-muted rounded-md text-sm">
+                    <strong>Campaign Name:</strong> {waCampaignName}<br/>
+                    <strong>Target Segment:</strong> 24 Opted-in Customers<br/>
+                    <strong>Test Window:</strong> 2-5 PM (Next 3 Days)<br/>
+                    <strong>Spending Limit:</strong> ₹300
+                </div>
+                <div className="mb-4">
+                    <strong>Message Preview:</strong>
+                    <div className="p-3 bg-green-50 text-green-900 rounded-md mt-1 border border-green-200">
+                        {waOffer}
+                    </div>
+                </div>
+                
+                <div className="flex justify-end gap-2 mt-6">
+                    <button className="secondary" onClick={() => setWaDialogOpen(false)}>Cancel</button>
+                    <button className="primary" disabled={waLoading} onClick={confirmSendWhatsApp}>
+                        {waLoading ? <LoaderCircle className="spin inline mr-1" size={16}/> : null}
+                        Send to 24 Customers <Send size={16} className="inline ml-1"/>
+                    </button>
+                </div>
+            </div>
+        ) : (
+            <div className="wa-result mt-4 text-center py-6">
+                {waResult.success ? (
+                    <>
+                        <div className="text-green-600 mb-2 flex justify-center"><Check size={32}/></div>
+                        <h3 className="text-lg font-bold mb-1">Messages Sent!</h3>
+                        <p className="muted mb-4">{waResult.message}</p>
+                        {waResult.sandbox && (
+                            <div className="bg-amber-50 text-amber-800 p-2 rounded text-sm mb-4">
+                                <strong>Sandbox Mode:</strong> WhatsApp credentials missing in .env. Mock messages simulated successfully.
+                            </div>
+                        )}
+                        <button className="primary" onClick={() => setWaDialogOpen(false)}>Done</button>
+                    </>
+                ) : (
+                    <>
+                        <div className="text-red-600 mb-2 flex justify-center"><Info size={32}/></div>
+                        <h3 className="text-lg font-bold mb-1">Send Failed</h3>
+                        <p className="text-red-700 text-sm mb-4">{waResult.message}</p>
+                        <div className="flex justify-center gap-2">
+                            <button className="secondary" onClick={() => setWaDialogOpen(false)}>Cancel</button>
+                            <button className="primary" onClick={confirmSendWhatsApp}>Retry</button>
+                        </div>
+                    </>
+                )}
+            </div>
+        )}
+    </DialogContent>
+</Dialog>
+
  </SidebarProvider>;
 }
 

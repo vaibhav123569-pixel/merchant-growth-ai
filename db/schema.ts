@@ -29,3 +29,19 @@ export const paytm_transactions = sqliteTable("paytm_transactions", {
     index("pt_merchant_idx").on(t.merchantId),
     index("pt_status_idx").on(t.status)
 ]);
+
+export const whatsapp_messages = sqliteTable("whatsapp_messages", {
+    id: text("id").primaryKey(),
+    merchantId: text("merchant_id").notNull().references(() => users.id),
+    campaignName: text("campaign_name"),
+    recipient: text("recipient").notNull(),
+    message: text("message").notNull(),
+    templateUsed: text("template_used"),
+    status: text("status").notNull().default("SENT"),
+    whatsappMessageId: text("whatsapp_message_id"),
+    deliveryStatus: text("delivery_status").default("pending"),
+    readStatus: text("read_status").default("unread"),
+    redemptionStatus: text("redemption_status").default("none"),
+    attributedRevenue: integer("attributed_revenue").default(0),
+    sentAt: integer("sent_at").notNull()
+});

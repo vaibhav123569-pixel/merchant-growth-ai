@@ -10,7 +10,7 @@ export async function POST(request: Request) {
         const bodyText = await request.text();
         const bodyObj = JSON.parse(bodyText);
         
-        const mkey = env.PAYTM_MERCHANT_KEY || process.env.PAYTM_MERCHANT_KEY;
+        const mkey = (env as any).PAYTM_MERCHANT_KEY || (process.env as any).PAYTM_MERCHANT_KEY;
         if (!mkey) return json({error: "Server configuration error"}, 500);
 
         const head = bodyObj.head || {};

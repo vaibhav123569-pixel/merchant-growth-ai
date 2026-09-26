@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Merchant Growth AI",
+  title: "GROWTHmerchant",
   description: "Understand your payments, inspect the evidence, and test your next business move.",
 icons: {
     icon: "/favicon.svg",

@@ -15,6 +15,20 @@
       "when": 1790412606910,
       "tag": "0001_stiff_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790416478767,
+      "tag": "0002_classy_omega_flight",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790419548208,
+      "tag": "0003_tearful_kabuki",
+      "breakpoints": true
     }
   ]
 }
