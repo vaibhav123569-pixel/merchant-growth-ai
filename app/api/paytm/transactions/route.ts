@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         return json({
             orderId: orderId,
             amount: b.amount,
-            mid: (env as any).PAYTM_MID || (process.env as any).PAYTM_MID
+            mid: (process.env as any).PAYTM_MID || (process.env as any).PAYTM_MID
         });
     } catch (e) {
         console.error("Create transaction error", e);

@@ -14,9 +14,9 @@ export async function verifyChecksum(body: any, checksum: string, merchantKey: s
 }
 
 export async function checkTransactionStatus(orderId: string): Promise<any> {
-    const mid = (env as any).PAYTM_MID || (process.env as any).PAYTM_MID;
-    const mkey = (env as any).PAYTM_MERCHANT_KEY || (process.env as any).PAYTM_MERCHANT_KEY;
-    const isProd = ((env as any).PAYTM_ENVIRONMENT || (process.env as any).PAYTM_ENVIRONMENT) === "PRODUCTION";
+    const mid = (process.env as any).PAYTM_MID || (process.env as any).PAYTM_MID;
+    const mkey = (process.env as any).PAYTM_MERCHANT_KEY || (process.env as any).PAYTM_MERCHANT_KEY;
+    const isProd = ((process.env as any).PAYTM_ENVIRONMENT || (process.env as any).PAYTM_ENVIRONMENT) === "PRODUCTION";
     
     if (!mid || !mkey) {
         throw new Error("Paytm credentials not configured in environment variables.");

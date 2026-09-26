@@ -24,9 +24,9 @@ export async function POST(request: Request) {
         const results = [];
         
         // WhatsApp API configuration
-        const token = (process.env as any).WHATSAPP_TOKEN || (env as any).WHATSAPP_TOKEN;
-        const phoneId = (process.env as any).WHATSAPP_PHONE_NUMBER_ID || (env as any).WHATSAPP_PHONE_NUMBER_ID;
-        const version = (process.env as any).WHATSAPP_API_VERSION || (env as any).WHATSAPP_API_VERSION || "v17.0";
+        const token = (process.env as any).WHATSAPP_TOKEN || (process.env as any).WHATSAPP_TOKEN;
+        const phoneId = (process.env as any).WHATSAPP_PHONE_NUMBER_ID || (process.env as any).WHATSAPP_PHONE_NUMBER_ID;
+        const version = (process.env as any).WHATSAPP_API_VERSION || (process.env as any).WHATSAPP_API_VERSION || "v17.0";
         
         const isSandbox = !token || !phoneId;
 
