@@ -1,5 +1,5 @@
 import PaytmChecksum from "paytmchecksum";
-import { env } from "cloudflare:workers";
+
 
 export async function generateChecksum(body: any, merchantKey: string): Promise<string> {
     const isObj = typeof body === "object";

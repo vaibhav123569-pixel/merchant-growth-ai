@@ -1,7 +1,7 @@
 import { json, user, readJson } from "@/lib/server";
 import { getDb } from "@/db/index";
 import { whatsapp_messages } from "@/db/schema";
-import { env } from "cloudflare:workers";
+
 
 export async function POST(request: Request) {
     try {

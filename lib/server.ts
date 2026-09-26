@@ -1,4 +1,4 @@
-import {env} from "cloudflare:workers";
+
 export const db=()=>{const database=(env as unknown as {DB:D1Database}).DB;if(!database)throw new Error("Database unavailable");return database;};
 export const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 export const digest=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)))).map(n=>n.toString(16).padStart(2,"0")).join("");

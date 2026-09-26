@@ -3,7 +3,7 @@ import { json } from "@/lib/server";
 import { getDb } from "@/db/index";
 import { whatsapp_messages } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { env } from "cloudflare:workers";
+
 
 // WhatsApp Cloud API Webhook Verification
 export async function GET(request: Request) {

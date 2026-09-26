@@ -1,6 +1,6 @@
 import { json } from "@/lib/server";
 import { verifyChecksum, checkTransactionStatus } from "@/lib/paytm";
-import { env } from "cloudflare:workers";
+
 import { getDb } from "@/db/index";
 import { paytm_transactions } from "@/db/schema";
 import { eq } from "drizzle-orm";

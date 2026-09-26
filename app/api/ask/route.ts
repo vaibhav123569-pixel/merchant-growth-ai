@@ -1,4 +1,4 @@
-import {env} from 'cloudflare:workers';
+
 import {generateExplanation,llmStatus,type LLMConfig} from '@/lib/llm';
 import {explain} from '@/lib/analytics';
 import {json,sameOrigin,readJson,throttle} from '@/lib/server';
