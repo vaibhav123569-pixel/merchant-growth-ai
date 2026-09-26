@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {generateExplanation,validateModelAnswer} from '../lib/llm';
+import {evidence} from '../lib/analytics';
+const good={intent:'sales',explanation:'The pattern suggests fewer payments rather than a smaller typical payment. The records cannot establish the cause.',evidence_id:evidence.id};
+let observed:Record<string,unknown>={};
+const mock:typeof fetch=async(url,init)=>{observed={url,body:JSON.parse(init?.body as string),headers:init?.headers};return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(good)}]}]});};
+const result=await generateExplanation('Why was my afternoon slow?','en',{OPENAI_API_KEY:'test-only-not-real'},mock);
+assert.equal(result.live,true);assert.match(result.text,/27/);assert.match(result.text,/32.5/);
+assert.equal(observed.url,'https://api.openai.com/v1/responses');assert.equal((observed.body as {store:boolean}).store,false);
+assert.equal((await generateExplanation('sales','en',{})).live,false);
+const failing:typeof fetch=async()=>Response.json({error:'private upstream detail'},{status:401});
+const fallback=await generateExplanation('sales','en',{OPENAI_API_KEY:'test-only'},failing);assert.equal(fallback.live,false);assert.ok(!fallback.reason?.includes('private upstream'));
+const limited:typeof fetch=async()=>Response.json({},{status:429});assert.equal((await generateExplanation('sales','en',{OPENAI_API_KEY:'test'},limited)).live,false);
+assert.throws(()=>validateModelAnswer(JSON.stringify({...good,explanation:'Your payments fell 90%.'})));
+assert.throws(()=>validateModelAnswer(JSON.stringify({...good,evidence_id:'invented'})));
+assert.throws(()=>validateModelAnswer('not-json'));
+const incomplete:typeof fetch=async()=>Response.json({status:'incomplete',output:[]});assert.equal((await generateExplanation('sales','en',{OPENAI_API_KEY:'test'},incomplete)).live,false);
+const hindi=await generateExplanation('दोपहर में भुगतान कम क्यों थे?','hi',{});assert.match(hindi.text,/भुगतान/);
+console.log('PASS: live-response adapter, request schema, fixed quantitative facts, missing key, rejected key, rate limit, malformed output, invented metrics, evidence ID validation, incomplete output, Hindi fallback. Provider calls were mocked; no real API key was used.');
+

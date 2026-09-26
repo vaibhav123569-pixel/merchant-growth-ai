@@ -1,0 +1,5 @@
+import {integer,sqliteTable,text,index,uniqueIndex} from "drizzle-orm/sqlite-core";
+export const users=sqliteTable("users",{id:text("id").primaryKey(),email:text("email"),name:text("name").notNull(),hash:text("hash"),salt:text("salt"),demo:integer("demo").notNull().default(0),created:integer("created").notNull()},t=>[uniqueIndex("users_email").on(t.email)]);
+export const sessions=sqliteTable("sessions",{token:text("token").primaryKey(),userId:text("user_id").notNull().references(()=>users.id),expires:integer("expires").notNull()},t=>[index("sessions_user").on(t.userId)]);
+export const actions=sqliteTable("actions",{id:text("id").primaryKey(),userId:text("user_id").notNull().references(()=>users.id),title:text("title").notNull(),offer:text("offer").notNull(),budget:integer("budget").notNull(),status:text("status").notNull(),counts:text("counts").notNull(),updated:integer("updated").notNull()},t=>[index("actions_user").on(t.userId)]);
+export const attempts=sqliteTable("attempts",{key:text("key").primaryKey(),count:integer("count").notNull(),until:integer("until").notNull()});
