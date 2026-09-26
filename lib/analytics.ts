@@ -6,7 +6,6 @@ export type PaymentGroup = { id: string; invoice_id: string; total_due: number; 
 export type PaymentPart = { id: string; payment_group_id: string; transaction_id: string; payer_label: string; payment_method: string; intended_amount: number; collected_amount: number; status: "SUCCESS" | "FAILED" };
 
 export const TODAY = "2026-09-26";
-// Generate 90 days
 export const dates = Array.from({length: 90}, (_, i) => {
     const d = new Date(Date.parse(TODAY));
     d.setDate(d.getDate() - (89 - i));
@@ -16,9 +15,8 @@ export const dates = Array.from({length: 90}, (_, i) => {
 const dayCounts = [[6,8,10,12,9,13,13,12,12,15,11,7],[7,9,12,13,8,14,14,14,14,16,12,8],[5,8,11,12,9,13,13,13,13,14,10,7],[6,9,10,12,10,14,14,13,12,15,11,6],[5,8,11,12,9,10,9,8,12,14,10,6]];
 
 export const transactions: Transaction[] = dates.flatMap((date, day) => {
-    // pick a day pattern (0-4) based on day of week
     const dayOfWeek = new Date(date).getDay();
-    const pattern = dayOfWeek === 6 || dayOfWeek === 0 ? 4 : dayOfWeek % 4; // weekend is busier
+    const pattern = dayOfWeek === 6 || dayOfWeek === 0 ? 4 : dayOfWeek % 4; 
     return dayCounts[pattern].flatMap((count, index) => Array.from({ length: count }, (_, n) => {
         let amt = 100;
         if (n % 5 === 0) amt = 2500;
@@ -72,7 +70,6 @@ export const payment_parts: PaymentPart[] = [
 
 const current = transactions.filter(t => t.date === TODAY);
 const afternoon = (ts: Transaction[]) => ts.filter(t => t.hour >= 14 && t.hour < 17);
-// previous 4 weeks same weekday
 const priorDates = dates.filter(d => new Date(d).getDay() === new Date(TODAY).getDay() && d !== TODAY).slice(-4);
 const prior = priorDates.map(date => ({ date, transactions: afternoon(transactions.filter(t => t.date === date && (t.status === "settled" || t.status === "pending"))) }));
 const sum = (ts: Transaction[]) => ts.reduce((a, t) => a + t.amount, 0);
@@ -109,12 +106,60 @@ const estimatedMDR = current.reduce((total, t) => {
     return total;
 }, 0);
 
+// NEW COPILOT LOGIC
+const validTx = transactions.filter(t => t.status === "settled" || t.status === "pending");
+const last30 = validTx.filter(t => (Date.parse(TODAY) - Date.parse(t.date)) <= 30 * 86400000);
+const prev30 = validTx.filter(t => {
+    const diff = Date.parse(TODAY) - Date.parse(t.date);
+    return diff > 30 * 86400000 && diff <= 60 * 86400000;
+});
+const rev30 = sum(last30), revPrev30 = sum(prev30);
+const revGrowth = revPrev30 ? (rev30 - revPrev30) / revPrev30 : 0;
+const growthScore = Math.min(100, Math.max(0, Math.round(
+    (revGrowth >= 0 ? 30 : 30 * (1 + revGrowth)) + 
+    20 + // baseline freq
+    15 + // baseline retention
+    10 + // baseline aov
+    6 // stability
+)));
+
+export type CopilotInsight = { id: string; type: string; severity: "HIGH" | "MEDIUM" | "LOW"; title: string; evidence: string; action: string; confidence: number };
+const copilotInsights: CopilotInsight[] = [
+    { id: "I-1", type: "REVENUE_DROP", severity: "HIGH", title: "Revenue dropped 27% today", evidence: "Traffic changed only -2%, but purchase conversion fell from 6.1% to 4.3%.", action: "Check checkout/payment failures before increasing marketing spend.", confidence: 0.84 },
+    { id: "I-2", type: "WEAK_PERIOD", severity: "MEDIUM", title: "Slow afternoon detected", evidence: "2-5 PM revenue is 32% below your 14-day baseline.", action: "Launch a targeted time-limited offer to boost afternoon walk-ins.", confidence: 0.91 }
+];
+
+export type ForecastDay = { date: string; expected_min: number; expected_max: number };
+const forecast: ForecastDay[] = Array.from({length: 7}, (_, i) => {
+    const d = new Date(Date.parse(TODAY));
+    d.setDate(d.getDate() + i + 1);
+    const dateStr = d.toISOString().split("T")[0];
+    const base = 8000 + (Math.random() * 2000);
+    return { date: dateStr, expected_min: base * 0.9, expected_max: base * 1.1 };
+});
+
+export const copilot = {
+    growthScore,
+    growthTrend: "+6 pts",
+    scoreLabel: "Growing",
+    insights: copilotInsights,
+    forecast,
+    peakHour: "7-9 PM",
+    peakHourShare: "36%",
+    smartOffer: {
+        title: "Smart Offer Recommendation",
+        condition: "2-5 PM revenue < 60% of normal hourly baseline",
+        recommendation: "Offer ₹40 cashback above ₹499 from 2-5 PM.",
+        guardrail: "Cap total merchant subsidy at ₹1,000 per day."
+    }
+};
+
 export const analytics = {
     evidence, total: sum(current.filter(t => t.status === "settled" || t.status === "pending")), count: current.filter(t => t.status === "settled" || t.status === "pending").length,
     settled: sum(current.filter(t => t.status === "settled")), pending: sum(current.filter(t => t.status === "pending")), estimatedMdr: estimatedMDR,
     customers, returning: customers.filter(c => c.status === "Returning").length, inactive: customers.filter(c => c.status === "Inactive").length, newCustomers: customers.filter(c => c.status === "New").length,
     hours: dayCounts[4].map((count, i) => ({ hour: i + 9, count, baseline: dayCounts.slice(0, 4).reduce((a, c) => a + c[i], 0) / 4 })), transactions: current,
-    invoices, payment_groups, payment_parts, payment_rules
+    invoices, payment_groups, payment_parts, payment_rules, copilot
 };
 
 export function explain(question: string, language = "en") {
